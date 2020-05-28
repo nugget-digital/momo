@@ -1,5 +1,7 @@
 use anyhow::{bail, Error, Result};
 use http::StatusCode;
+use lazy_static::lazy_static;
+use regex::Regex;
 use reqwest::blocking;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -8,9 +10,11 @@ use uuid::Uuid;
 use std::fmt;
 use std::str::FromStr;
 
-mod common;
+pub mod common;
+mod util;
 
 use common::*;
+use util::rm_lead_char_plus;
 
 #[repr(C)]
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
@@ -47,6 +51,71 @@ impl fmt::Display for PaymentStatus {
     }
 }
 
+#[repr(C)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+pub enum CountryCode {
+    Ghana,
+    Nigeria,
+}
+
+impl FromStr for CountryCode {
+    type Err = Error;
+
+    fn from_str(code: &str) -> Result<CountryCode> {
+        let country_code = match code {
+            "233" => CountryCode::Ghana,
+            "419" => CountryCode::Nigeria,
+            _ => bail!("unknown country code {:?}", code),
+        };
+
+        Ok(country_code)
+    }
+}
+
+impl fmt::Display for CountryCode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let s: &str = match self {
+            CountryCode::Ghana => "233",
+            CountryCode::Nigeria => "419",
+        };
+
+        write!(f, "{}", s)
+    }
+}
+
+// const ONLY_NUMBERS: Regex = Regex::new("[^0-9]+").unwrap();
+
+lazy_static! {
+    static ref ONLY_NUMBERS: Regex = Regex::new("[^0-9]+").unwrap();
+}
+
+// TODO: how to display msisdn to_string()
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+struct Msisdn(String);
+
+impl Msisdn {
+    fn new(country_code: CountryCode, mobile_number: &str) -> Result<Msisdn> {
+        let numbers = ONLY_NUMBERS.replace(mobile_number, "");
+
+        let rebase: &str = rm_lead_char_plus(&numbers, '0');
+
+        // for each char in country_code do rm_lead_char_plus
+        // country_code.to_string().chars().iter()
+        for c in country_code.to_string().chars() {
+            let rebase: &str = rm_lead_char_plus(rebase, c);
+            let rebase: &str = rm_lead_char_plus(rebase, c);
+        }
+        // let rebase: &str = rm_lead_char_plus(rebase, '2');
+        // let rebase: &str = rm_lead_char_plus(rebase, '3');
+
+        let rebase: &str = rm_lead_char_plus(rebase, '0');
+
+        let msisdn: String = format!("{}{}", country_code, rebase);
+
+        Ok(Msisdn(msisdn))
+    }
+}
+
 #[allow(non_snake_case)]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Balance {
@@ -68,15 +137,15 @@ pub struct Config {
 #[derive(Debug)]
 pub struct Client {
     http_client: blocking::Client,
-    target_environment: String,
+    pub target_environment: String,
     username: String,
     password: String,
     subscription_key: String,
     collections_access_token: String,
-    base_url: String,
-    callback_host: String,
+    pub base_url: String,
+    pub callback_host: String,
     reauthorize: bool,
-    metadata: String,
+    pub metadata: String,
 }
 
 #[derive(Deserialize)]
@@ -167,9 +236,9 @@ impl IClient for Client {
         let device_id = if let Some(id) = &config.device_id {
             id
         } else {
-            println!("[mini-mtn-momo] using fallback device id \"unknown\"");
+            println!("[mini-mtn-momo] using fallback device id \"None\"");
 
-            "unknown"
+            "None"
         };
 
         let mut client = Client {
@@ -364,8 +433,18 @@ impl IClient for Client {
 mod tests {
     use super::*;
     use proptest::prelude::*;
+    use regex::Regex;
 
     proptest! {
+        #[test]
+        fn gh_mobile_number_to_msisdn(s in "\\+233-[1-9]{2}-[0-9]{3}-[0-9]{4}") {
+            let expected: Regex = Regex::new("^233[^1-9]{2}[0-9]{7}$").expect("Regex::new");
+
+            let msisdn = Msisdn::new(CountryCode::Ghana, &s).expect("Msisdn::new");
+
+            assert!(expected.is_match(&format!("{}", msisdn)));
+        }
+
         #[test]
         fn payment_status_from_str_fails_on_unicode(s in "\\PC*") {
             assert!(PaymentStatus::from_str(&s).is_err())
