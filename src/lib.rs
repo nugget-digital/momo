@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use uuid::Uuid;
 
+use std::fmt;
 use std::str::FromStr;
 
 mod common;
@@ -12,7 +13,7 @@ mod common;
 use common::*;
 
 #[repr(C)]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum PaymentStatus {
     Resolved,
     Rejected,
@@ -31,6 +32,18 @@ impl FromStr for PaymentStatus {
         };
 
         Ok(payment_status)
+    }
+}
+
+impl fmt::Display for PaymentStatus {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let s: &str = match self {
+            PaymentStatus::Resolved => "SUCCESSFUL",
+            PaymentStatus::Rejected => "FAILED",
+            PaymentStatus::Pending => "PENDING",
+        };
+
+        write!(f, "{}", s)
     }
 }
 
@@ -344,5 +357,59 @@ impl IClient for Client {
                 response.status(),
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn payment_status_from_str_fails_on_unicode(s in "\\PC*") {
+            assert!(PaymentStatus::from_str(&s).is_err())
+        }
+    }
+
+    #[test]
+    fn roundtripping_payment_status_pending() -> () {
+        let string: String = PaymentStatus::Pending.to_string();
+
+        assert_eq!(string, "PENDING");
+
+        let status: PaymentStatus =
+            PaymentStatus::from_str(&string).expect("PaymentStatus::Pending");
+
+        assert_eq!(status, PaymentStatus::Pending);
+    }
+
+    #[test]
+    fn roundtripping_payment_status_rejected() -> () {
+        let string: String = PaymentStatus::Rejected.to_string();
+
+        assert_eq!(string, "FAILED");
+
+        let status: PaymentStatus =
+            PaymentStatus::from_str(&string).expect("PaymentStatus::Rejected");
+
+        assert_eq!(status, PaymentStatus::Rejected);
+    }
+
+    #[test]
+    fn roundtripping_payment_status_resolved() -> () {
+        let string: String = PaymentStatus::Resolved.to_string();
+
+        assert_eq!(string, "SUCCESSFUL");
+
+        let status: PaymentStatus =
+            PaymentStatus::from_str(&string).expect("PaymentStatus::Resolved");
+
+        assert_eq!(status, PaymentStatus::Resolved);
+    }
+
+    #[test]
+    fn payment_status_from_str_fails_on_unknown_status() {
+        assert!(PaymentStatus::from_str("UNKNOWN").is_err());
     }
 }
