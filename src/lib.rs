@@ -14,7 +14,7 @@ pub mod common;
 mod util;
 
 use common::*;
-use util::rm_lead_char_plus;
+use util::rm_lead_char;
 
 #[repr(C)]
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
@@ -51,80 +51,84 @@ impl fmt::Display for PaymentStatus {
     }
 }
 
-#[repr(C)]
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-pub enum CountryCode {
-    Ghana,
-    Nigeria,
+pub struct Country {
+    code: String,
+    prefix: String,
+    non_prefix_digits: usize,
 }
-
-impl FromStr for CountryCode {
-    type Err = Error;
-
-    fn from_str(code: &str) -> Result<CountryCode> {
-        let country_code = match code {
-            "233" => CountryCode::Ghana,
-            "419" => CountryCode::Nigeria,
-            _ => bail!("unknown country code {:?}", code),
-        };
-
-        Ok(country_code)
-    }
-}
-
-impl fmt::Display for CountryCode {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let s: &str = match self {
-            CountryCode::Ghana => "233",
-            CountryCode::Nigeria => "419",
-        };
-
-        write!(f, "{}", s)
-    }
-}
-
-// const ONLY_NUMBERS: Regex = Regex::new("[^0-9]+").unwrap();
 
 lazy_static! {
     static ref ONLY_NUMBERS: Regex = Regex::new("[^0-9]+").unwrap();
 }
 
-// TODO: how to display msisdn to_string()
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 struct Msisdn(String);
 
 impl Msisdn {
-    fn new(country_code: CountryCode, mobile_number: &str) -> Result<Msisdn> {
-        let numbers = ONLY_NUMBERS.replace(mobile_number, "");
+    fn new(
+        mobile_number: &str,
+        default_country: &Country,
+        supported_countries: Vec<&Country>,
+    ) -> Result<Msisdn> {
+        let rebase = ONLY_NUMBERS.replace_all(mobile_number, "");
 
-        let rebase: &str = rm_lead_char_plus(&numbers, '0');
+        let mut rebase: &str = rm_lead_char(&rebase, '0', true);
 
-        // for each char in country_code do rm_lead_char_plus
-        // country_code.to_string().chars().iter()
-        for c in country_code.to_string().chars() {
-            let rebase: &str = rm_lead_char_plus(rebase, c);
-            let rebase: &str = rm_lead_char_plus(rebase, c);
+        // check if rebase startswith a known prefix and has the correct number of non_prefix_digits
+        // if yes return rebase
+        // else procedd with default_country
+        for supported_country in supported_countries {
+            if rebase.starts_with(&supported_country.prefix)
+                && rebase.len() == supported_country.non_prefix_digits + 3usize
+            {
+                return Ok(Msisdn(rebase.to_string()));
+            }
         }
-        // let rebase: &str = rm_lead_char_plus(rebase, '2');
-        // let rebase: &str = rm_lead_char_plus(rebase, '3');
 
-        let rebase: &str = rm_lead_char_plus(rebase, '0');
+        if rebase.len() < default_country.non_prefix_digits {
+            bail!(
+                "mobile number {} has too few \
+                 non prefix digits for default {:?}",
+                mobile_number,
+                default_country
+            );
+        } else if rebase.len() > default_country.non_prefix_digits {
+            for c in default_country.prefix.chars() {
+                rebase = rm_lead_char(rebase, c, false);
+            }
 
-        let msisdn: String = format!("{}{}", country_code, rebase);
+            rebase = rm_lead_char(rebase, '0', false);
 
-        Ok(Msisdn(msisdn))
+            if rebase.len() != default_country.non_prefix_digits {
+                bail!(
+                    "mobile number {} has an incorrect number of \
+                     non prefix digits for default {:?}",
+                    mobile_number,
+                    default_country
+                );
+            }
+        }
+
+        Ok(Msisdn(format!("{}{}", default_country.prefix, rebase)))
+    }
+}
+
+impl fmt::Display for Msisdn {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        (self.0).fmt(f)
     }
 }
 
 #[allow(non_snake_case)]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Balance {
     #[serde(rename(deserialize = "available_balance"))]
     availableBalance: String,
     currency: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Config {
     pub username: String,
     pub password: String,
@@ -435,19 +439,70 @@ mod tests {
     use proptest::prelude::*;
     use regex::Regex;
 
+    lazy_static! {
+        static ref GHANA: Country = Country {
+            code: String::from("GH"),
+            prefix: String::from("233"),
+            non_prefix_digits: 9usize,
+        };
+        static ref NIGERIA: Country = Country {
+            code: String::from("NG"),
+            prefix: String::from("234"),
+            non_prefix_digits: 8usize,
+        };
+        static ref GHANA_MSISDN: Regex =
+            Regex::new("^233[1-9]{2}[0-9]{7}$").expect("GHANA_MSISDN");
+        static ref NIGERIA_MSISDN: Regex =
+            Regex::new("^234[1-9]{2}[0-9]{6}$").expect("NIGERIA_MSISDN");
+    }
+
     proptest! {
         #[test]
-        fn gh_mobile_number_to_msisdn(s in "\\+233-[1-9]{2}-[0-9]{3}-[0-9]{4}") {
-            let expected: Regex = Regex::new("^233[^1-9]{2}[0-9]{7}$").expect("Regex::new");
+        fn gh_mobile_number_to_msisdn(s in "(:?(:?(:?\\+|00)233-?)|0)?[1-9]{2}-?[0-9]{3}-?[0-9]{4}") {
+            let msisdn = Msisdn::new(&s, &GHANA, vec![&GHANA]).expect("Msisdn::new");
 
-            let msisdn = Msisdn::new(CountryCode::Ghana, &s).expect("Msisdn::new");
-
-            assert!(expected.is_match(&format!("{}", msisdn)));
+            assert!(GHANA_MSISDN.is_match(&msisdn.to_string()));
         }
 
         #[test]
-        fn payment_status_from_str_fails_on_unicode(s in "\\PC*") {
-            assert!(PaymentStatus::from_str(&s).is_err())
+        fn ng_mobile_number_to_msisdn(s in "(:?(:?(:?\\+|00)234-?)|0)?[1-9]{2}-?[0-9]{3}-?[0-9]{3}") {
+            let msisdn = Msisdn::new(&s, &NIGERIA, vec![&NIGERIA]).expect("Msisdn::new");
+
+            assert!(NIGERIA_MSISDN.is_match(&msisdn.to_string()));
+        }
+
+        #[test]
+        fn msisdn_normalization_using_default_country(s in "0?[1-9]{2}-?[0-9]{3}-?[0-9]{4}") {
+            let msisdn = Msisdn::new(&s, &GHANA, vec![&GHANA]).expect("Msisdn::new");
+
+            assert!(GHANA_MSISDN.is_match(&msisdn.to_string()));
+        }
+
+        #[test]
+        fn msisdn_normalization_using_non_default_country(s in "(:?(:?\\+|00)234-?)[1-9]{2}-?[0-9]{3}-?[0-9]{3}") {
+            let msisdn = Msisdn::new(&s, &GHANA, vec![&GHANA, &NIGERIA]).expect("Msisdn::new");
+
+            assert!(NIGERIA_MSISDN.is_match(&msisdn.to_string()));
+        }
+
+        #[test]
+        fn msisdn_normalization_fails_on_short_numbers(s in "[0-9]{1,7}") {
+            assert!(Msisdn::new(&s, &GHANA, vec![&GHANA, &NIGERIA]).is_err());
+        }
+
+        #[test]
+        fn msisdn_normalization_fails_on_large_numbers(s in "[0-9]{13,}") {
+            assert!(Msisdn::new(&s, &GHANA, vec![&GHANA, &NIGERIA]).is_err());
+        }
+
+        #[test]
+        fn msisdn_normalization_fails_on_unicode(s in "\\PC*") {
+            assert!(Msisdn::new(&s, &GHANA, vec![&GHANA, &NIGERIA]).is_err());
+        }
+
+        #[test]
+        fn payment_status_from_str_fails_on_unicode(s in "\\PC*")  {
+            assert!(PaymentStatus::from_str(&s).is_err());
         }
     }
 
