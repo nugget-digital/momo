@@ -1,13 +1,14 @@
-pub fn rm_lead_char(s: &str, chr: char, multiple: bool) -> &str {
-    if s.len() == 0 {
-        return s;
+pub fn strip_lead_char(string: &str, character: char, multiple: bool) -> &str {
+    if string.len() == 0 {
+        return string;
     }
 
-    let bytes: &[u8] = s.as_bytes();
+    let bytes: &[u8] = string.as_bytes();
     let mut i: usize = 0usize;
 
+    // NOTE: setting var i to the new string slice head
     loop {
-        if bytes[i] as char == chr {
+        if bytes[i] as char == character {
             i = i + 1usize;
 
             if i >= bytes.len() || !multiple {
@@ -18,5 +19,5 @@ pub fn rm_lead_char(s: &str, chr: char, multiple: bool) -> &str {
         }
     }
 
-    &s[i..]
+    &string[i..]
 }

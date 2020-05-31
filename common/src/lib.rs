@@ -7,7 +7,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 mod util;
-use util::rm_lead_char;
+use util::strip_lead_char;
 
 pub const FALLBACK_CALLBACK_HOST: &str = "www.mocky.io";
 pub const FALLBACK_CALLBACK_URL: &str =
@@ -30,7 +30,7 @@ impl FromStr for PaymentStatus {
     type Err = Error;
 
     fn from_str(status: &str) -> Result<PaymentStatus> {
-        let payment_status = match status {
+        let payment_status: PaymentStatus = match status {
             "SUCCESSFUL" => PaymentStatus::Resolved,
             "FAILED" => PaymentStatus::Rejected,
             "PENDING" => PaymentStatus::Pending,
@@ -55,9 +55,9 @@ impl fmt::Display for PaymentStatus {
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Country {
-    code: String,
-    prefix: String,
-    non_prefix_digits: usize,
+    pub code: String,
+    pub prefix: String,
+    pub non_prefix_digits: usize,
 }
 
 lazy_static! {
@@ -73,9 +73,9 @@ impl Msisdn {
         default_country: &Country,
         supported_countries: Vec<&Country>,
     ) -> Result<Msisdn> {
-        let rebase = ONLY_NUMBERS.replace_all(mobile_number, "");
+        let rebase: &str = &ONLY_NUMBERS.replace_all(mobile_number, "");
 
-        let mut rebase: &str = rm_lead_char(&rebase, '0', true);
+        let mut rebase: &str = strip_lead_char(&rebase, '0', true);
 
         for supported_country in supported_countries {
             if rebase.starts_with(&supported_country.prefix)
@@ -93,11 +93,11 @@ impl Msisdn {
                 default_country
             );
         } else if rebase.len() > default_country.non_prefix_digits {
-            for c in default_country.prefix.chars() {
-                rebase = rm_lead_char(rebase, c, false);
+            for character in default_country.prefix.chars() {
+                rebase = strip_lead_char(rebase, character, false);
             }
 
-            rebase = rm_lead_char(rebase, '0', false);
+            rebase = strip_lead_char(rebase, '0', false);
 
             if rebase.len() != default_country.non_prefix_digits {
                 bail!(

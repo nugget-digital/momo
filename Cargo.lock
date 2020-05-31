@@ -85,7 +85,7 @@ dependencies = [
  "anyhow",
  "common",
  "http",
- "proptest",
+ "lazy_static",
  "reqwest",
  "serde",
  "serde_json",

@@ -1,13 +1,12 @@
 use std::str::FromStr;
 
 use anyhow::{bail, Result};
+use common::*;
 use http::StatusCode;
 use reqwest::blocking;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use uuid::Uuid;
-
-use common::*;
 
 #[derive(Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Config {
@@ -16,7 +15,6 @@ pub struct Config {
     pub subscription_key: String,
     pub base_url: Option<String>,
     pub callback_host: Option<String>,
-    pub device_id: Option<String>,
 }
 
 #[derive(Debug)]
@@ -36,7 +34,7 @@ pub struct Client {
 struct Authorization {
     access_token: String,
     token_type: String,
-    expires_in: String,
+    expires_in: u64,
 }
 
 #[allow(non_snake_case)]
@@ -64,7 +62,7 @@ pub trait IClient {
         &mut self,
         amount: u64,
         currency: &str,
-        mobile_number: &str,
+        msisdn: &str,
         callback_url: Option<&str>,
     ) -> Result<Uuid>;
     fn request_to_pay_status(
@@ -144,6 +142,7 @@ impl IClient for Client {
             .post(&url)
             .basic_auth(&self.username, Some(&self.password))
             .header("Ocp-Apim-Subscription-Key", &self.subscription_key)
+            .header("Content-Length", "0")
             .send()?;
 
         if response.status() != StatusCode::OK {
@@ -189,6 +188,19 @@ impl IClient for Client {
             );
         };
 
+        let body: String = json!({
+            "amount": amount,
+            "currency": currency,
+            "externalId": &reference_id_string,
+            "payer": {
+              "partyIdType": "MSISDN",
+              "partyId": msisdn,
+            },
+            "payerMessage": "it's time to pay :)",
+            "payeeNote": "TODO",
+        })
+        .to_string();
+
         let response = self
             .http_client
             .post(&url)
@@ -197,17 +209,9 @@ impl IClient for Client {
             .header("X-Reference-Id", &reference_id_string)
             .header("X-Target-Environment", &self.target_environment)
             .header("Ocp-Apim-Subscription-Key", &self.subscription_key)
-            .json(&json!({
-                "amount": amount,
-                "currency": currency,
-                "externalId": &reference_id_string,
-                "payer": {
-                  "partyIdType": "MSISDN",
-                  "partyId": msisdn,
-                },
-                "payerMessage": "it's time to pay :)",
-                "payeeNote": "TODO",
-            }))
+            .header("Content-Type", "application/json")
+            .header("Content-Length", body.chars().count())
+            .body(body)
             .send()?;
 
         let status = response.status();
