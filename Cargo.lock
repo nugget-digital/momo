@@ -79,20 +79,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4785bdd1c96b2a846b2bd7cc02e86b6b3dbf14e7e53446c4f54c92a361040822"
 
 [[package]]
-name = "client"
-version = "0.0.0"
-dependencies = [
- "anyhow",
- "common",
- "http",
- "lazy_static",
- "reqwest",
- "serde",
- "serde_json",
- "uuid",
-]
-
-[[package]]
 name = "common"
 version = "0.0.0"
 dependencies = [
@@ -426,6 +412,21 @@ checksum = "2684d4c2e97d99848d30b324b00c8fcc7e5c897b7cbb5819b09e7c90e8baf212"
 dependencies = [
  "mime",
  "unicase",
+]
+
+[[package]]
+name = "mini"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "common",
+ "http",
+ "lazy_static",
+ "log",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "uuid",
 ]
 
 [[package]]

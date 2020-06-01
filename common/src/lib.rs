@@ -122,8 +122,7 @@ impl fmt::Display for Msisdn {
 #[allow(non_snake_case)]
 #[derive(Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Balance {
-    // TODO: make this an int of cents
-    #[serde(rename = "amount")]
+    // TODO: make this an int of cents, rename
     availableBalance: String,
     // TODO: make this a public enum
     currency: String,

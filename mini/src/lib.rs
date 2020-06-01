@@ -3,6 +3,7 @@ use std::str::FromStr;
 use anyhow::{bail, Result};
 use common::*;
 use http::StatusCode;
+use log::{debug, info, trace, warn};
 use reqwest::blocking;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -74,12 +75,12 @@ pub trait IClient {
 
 impl IClient for Client {
     fn new(config: &Config) -> Result<Client> {
-        let http_client = blocking::Client::builder()
+        let http_client: blocking::Client = blocking::Client::builder()
             .http1_title_case_headers()
             .build()?;
 
-        let base_url;
-        let target_environment;
+        let base_url: String;
+        let target_environment: &str;
 
         if let Some(url) = &config.base_url {
             if url.ends_with("/") {
@@ -94,7 +95,7 @@ impl IClient for Client {
                 target_environment = SANDBOX;
             };
         } else {
-            println!(
+            debug!(
                 "[mini-mtn-momo] using fallback sandbox environment \
                 located @ {}",
                 SANDBOX_BASE_URL
@@ -104,10 +105,10 @@ impl IClient for Client {
             target_environment = SANDBOX;
         };
 
-        let callback_host = if let Some(domain) = &config.callback_host {
+        let callback_host: &str = if let Some(domain) = &config.callback_host {
             domain
         } else {
-            println!(
+            debug!(
                 "[mini-mtn-momo] using fallback callback host \"{}\"",
                 FALLBACK_CALLBACK_HOST
             );
@@ -115,7 +116,7 @@ impl IClient for Client {
             FALLBACK_CALLBACK_HOST
         };
 
-        let mut client = Client {
+        let mut client: Client = Client {
             http_client,
             target_environment: target_environment.to_string(),
             username: config.username.clone(),
@@ -135,9 +136,9 @@ impl IClient for Client {
     fn authorize_collections(&mut self) -> Result<&Client> {
         self.reauthorize = false;
 
-        let url = format!("{}collection/token/", &self.base_url);
+        let url: String = format!("{}collection/token/", &self.base_url);
 
-        let response = self
+        let response: blocking::Response = self
             .http_client
             .post(&url)
             .basic_auth(&self.username, Some(&self.password))
@@ -147,8 +148,9 @@ impl IClient for Client {
 
         if response.status() != StatusCode::OK {
             bail!(
-                "authorizing collections failed - http status {:?}",
-                response.status()
+                "authorizing collections failed - http status {:?}\n{}",
+                response.status(),
+                response.text()?,
             );
         } else {
             self.collections_access_token =
@@ -167,15 +169,16 @@ impl IClient for Client {
         msisdn: &str,
         callback_url: Option<&str>,
     ) -> Result<Uuid> {
-        let url = format!("{}collection/v1_0/requesttopay/", &self.base_url);
+        let url: String =
+            format!("{}collection/v1_0/requesttopay/", &self.base_url);
 
-        let reference_id = Uuid::new_v4();
-        let reference_id_string = reference_id.to_string();
+        let reference_id: Uuid = Uuid::new_v4();
+        let reference_id_string: String = reference_id.to_string();
 
-        let cb_url = if let Some(url) = callback_url {
+        let cb_url: &str = if let Some(url) = callback_url {
             url
         } else if self.callback_host.ends_with("mocky.io") {
-            println!(
+            debug!(
                 "[mini-mtn-momo] using fallback callback url \"{}\"",
                 FALLBACK_CALLBACK_URL
             );
@@ -201,7 +204,7 @@ impl IClient for Client {
         })
         .to_string();
 
-        let response = self
+        let response: blocking::Response = self
             .http_client
             .post(&url)
             .bearer_auth(&self.collections_access_token)
@@ -214,21 +217,23 @@ impl IClient for Client {
             .body(body)
             .send()?;
 
-        let status = response.status();
+        let status: StatusCode = response.status();
 
         if status == StatusCode::ACCEPTED {
             Ok(reference_id)
         } else if status == StatusCode::UNAUTHORIZED && self.reauthorize {
-            println!("currently unauthorized, attempting reauthorization...");
+            debug!("currently unauthorized, attempting reauthorization...");
 
             self.authorize_collections()?;
 
             self.request_to_pay(amount, currency, msisdn, callback_url)
         } else {
             bail!(
-                "payment request failed - http status {:?} - reference id {}",
+                "payment request failed - http status {:?} - \
+                reference id {}\n{}",
                 response.status(),
                 reference_id_string,
+                response.text()?
             );
         }
     }
@@ -237,13 +242,13 @@ impl IClient for Client {
         &mut self,
         reference_id: &Uuid,
     ) -> Result<PaymentStatus> {
-        let url = format!(
+        let url: String = format!(
             "{}collection/v1_0/requesttopay/{}",
             &self.base_url,
             reference_id.to_string()
         );
 
-        let response = self
+        let response: blocking::Response = self
             .http_client
             .get(&url)
             .bearer_auth(&self.collections_access_token)
@@ -251,34 +256,38 @@ impl IClient for Client {
             .header("Ocp-Apim-Subscription-Key", &self.subscription_key)
             .send()?;
 
-        let status = response.status();
+        let status: StatusCode = response.status();
 
         if status == StatusCode::OK {
-            let payment_status_string = response.json::<Payment>()?.status;
+            let payment_status_string: String =
+                response.json::<Payment>()?.status;
 
-            let payment_status =
+            let payment_status: PaymentStatus =
                 PaymentStatus::from_str(&payment_status_string[..])?;
 
             Ok(payment_status)
         } else if status == StatusCode::UNAUTHORIZED && self.reauthorize {
-            println!("currently unauthorized, attempting reauthorization...");
+            debug!("currently unauthorized, attempting reauthorization...");
 
             self.authorize_collections()?;
 
             self.request_to_pay_status(&reference_id)
         } else {
             bail!(
-                    "requesting payment status failed - http status {:?} - reference id {}",
-                    response.status(),
-                    reference_id.to_string(),
-                );
+                "requesting payment status failed - http status {:?} - \
+                    reference id {}\n{}",
+                response.status(),
+                reference_id.to_string(),
+                response.text()?
+            );
         }
     }
 
     fn get_balance(&mut self) -> Result<Balance> {
-        let url = format!("{}collection/v1_0/account/balance", &self.base_url);
+        let url: String =
+            format!("{}collection/v1_0/account/balance", &self.base_url);
 
-        let response = self
+        let response: blocking::Response = self
             .http_client
             .get(&url)
             .bearer_auth(&self.collections_access_token)
@@ -286,22 +295,23 @@ impl IClient for Client {
             .header("Ocp-Apim-Subscription-Key", &self.subscription_key)
             .send()?;
 
-        let status = response.status();
+        let status: StatusCode = response.status();
 
         if status == StatusCode::OK {
             let balance = response.json::<Balance>()?;
 
             Ok(balance)
         } else if status == StatusCode::UNAUTHORIZED && self.reauthorize {
-            println!("currently unauthorized, attempting reauthorization...");
+            debug!("currently unauthorized, attempting reauthorization...");
 
             self.authorize_collections()?;
 
             self.get_balance()
         } else {
             bail!(
-                "getting wallet balance failed - http status {:?}",
+                "getting wallet balance failed - http status {:?}\n{}",
                 response.status(),
+                response.text()?
             );
         }
     }
