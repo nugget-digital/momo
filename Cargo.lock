@@ -87,6 +87,7 @@ dependencies = [
  "proptest",
  "regex",
  "serde",
+ "url",
 ]
 
 [[package]]
@@ -426,6 +427,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "url",
  "uuid",
 ]
 

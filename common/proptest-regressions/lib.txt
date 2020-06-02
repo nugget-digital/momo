@@ -6,3 +6,5 @@
 # everyone who runs the test benefits from these saved cases.
 cc 931c0997ff8fb8896f384b6202acf9143dd03e6469b500b42b8c44be67b65458 # shrinks to s = "0"
 cc f2cc6bddf242731a3012fc6d491399b69ed3cf5fea670a2c5708ddb93c10fe12 # shrinks to s = "0"
+cc 7a54563b67dafc94ee3e934dd57ed937a5887684704fa35fce2ae67d9972b3e5 # shrinks to s = "2330000000000"
+cc b06a2d6c38057b5eb63303cd32d59a382757d0842560cb0625b1b3e546501469 # shrinks to s = " 0100000000"

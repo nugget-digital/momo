@@ -3,10 +3,11 @@ use std::str::FromStr;
 use anyhow::{bail, Result};
 use common::*;
 use http::StatusCode;
-use log::{debug, info, trace, warn};
+use log::debug;
 use reqwest::blocking;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use url::Url;
 use uuid::Uuid;
 
 #[derive(Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -62,9 +63,9 @@ pub trait IClient {
     fn request_to_pay(
         &mut self,
         amount: u64,
-        currency: &str,
-        msisdn: &str,
-        callback_url: Option<&str>,
+        currency: Currency,
+        msisdn: &Msisdn,
+        callback_url: Option<&Url>,
     ) -> Result<Uuid>;
     fn request_to_pay_status(
         &mut self,
@@ -74,6 +75,7 @@ pub trait IClient {
 }
 
 impl IClient for Client {
+    // TODO: preformat all endpoint urls in contructor
     fn new(config: &Config) -> Result<Client> {
         let http_client: blocking::Client = blocking::Client::builder()
             .http1_title_case_headers()
@@ -165,9 +167,9 @@ impl IClient for Client {
     fn request_to_pay(
         &mut self,
         amount: u64,
-        currency: &str,
-        msisdn: &str,
-        callback_url: Option<&str>,
+        currency: Currency,
+        msisdn: &Msisdn,
+        callback_url: Option<&Url>,
     ) -> Result<Uuid> {
         let url: String =
             format!("{}collection/v1_0/requesttopay/", &self.base_url);
@@ -175,15 +177,15 @@ impl IClient for Client {
         let reference_id: Uuid = Uuid::new_v4();
         let reference_id_string: String = reference_id.to_string();
 
-        let cb_url: &str = if let Some(url) = callback_url {
+        let cb_url: &Url = if let Some(url) = callback_url {
             url
         } else if self.callback_host.ends_with("mocky.io") {
             debug!(
                 "[mini-mtn-momo] using fallback callback url \"{}\"",
-                FALLBACK_CALLBACK_URL
+                FALLBACK_CALLBACK_URL.as_str()
             );
 
-            FALLBACK_CALLBACK_URL
+            &FALLBACK_CALLBACK_URL
         } else {
             bail!(
                 "when having specified a custom callback host a callback url \
@@ -193,11 +195,11 @@ impl IClient for Client {
 
         let body: String = json!({
             "amount": amount,
-            "currency": currency,
+            "currency": currency.to_string(),
             "externalId": &reference_id_string,
             "payer": {
               "partyIdType": "MSISDN",
-              "partyId": msisdn,
+              "partyId": msisdn.to_string(),
             },
             "payerMessage": "it's time to pay :)",
             "payeeNote": "TODO",
@@ -208,7 +210,7 @@ impl IClient for Client {
             .http_client
             .post(&url)
             .bearer_auth(&self.collections_access_token)
-            .header("X-Callback-Url", cb_url)
+            .header("X-Callback-Url", cb_url.as_str())
             .header("X-Reference-Id", &reference_id_string)
             .header("X-Target-Environment", &self.target_environment)
             .header("Ocp-Apim-Subscription-Key", &self.subscription_key)
@@ -298,7 +300,7 @@ impl IClient for Client {
         let status: StatusCode = response.status();
 
         if status == StatusCode::OK {
-            let balance = response.json::<Balance>()?;
+            let balance: Balance = response.json::<Balance>()?;
 
             Ok(balance)
         } else if status == StatusCode::UNAUTHORIZED && self.reauthorize {
