@@ -1,7 +1,6 @@
 use std::str::FromStr;
 
 use anyhow::{bail, Result};
-use common::*;
 use http::StatusCode;
 use log::debug;
 use reqwest::blocking;
@@ -9,6 +8,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use url::Url;
 use uuid::Uuid;
+
+use common::*;
 
 #[derive(Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Config {
@@ -320,7 +321,7 @@ impl IClient for Client {
 }
 
 #[cfg(test)]
-mod tests {
+mod mtn_momo_mini_unit_tests {
     use super::*;
 
     #[test]

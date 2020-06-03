@@ -19,16 +19,16 @@ lazy_static! {
     };
     static ref CLIENT: Mutex<Client> =
         Mutex::new(Client::new(&CONFIG).expect("client"));
-        static ref GHANA: Country = Country {
-            code: String::from("GH"),
-            prefix: String::from("233"),
-            non_prefix_digits: 9usize,
-        };
-        static ref NIGERIA: Country = Country {
-            code: String::from("NG"),
-            prefix: String::from("234"),
-            non_prefix_digits: 8usize,
-        };
+    static ref GHANA: Country = Country {
+        code: String::from("GH"),
+        prefix: String::from("233"),
+        non_prefix_digits: 9usize,
+    };
+    static ref NIGERIA: Country = Country {
+        code: String::from("NG"),
+        prefix: String::from("234"),
+        non_prefix_digits: 8usize,
+    };
 }
 
 #[test]
@@ -49,6 +49,7 @@ fn part2_getting_balance() {
 }
 
 #[test]
+#[ignore]
 fn part3_request_to_pay_without_a_callback() {
     let mut client: MutexGuard<Client> = CLIENT.lock().expect("mutex client");
 
@@ -61,6 +62,7 @@ fn part3_request_to_pay_without_a_callback() {
 }
 
 #[test]
+#[ignore]
 fn part4_request_to_pay_with_a_callback() {
     let mut client: MutexGuard<Client> = CLIENT.lock().expect("mutex client");
 

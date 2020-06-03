@@ -167,10 +167,10 @@ pub struct Balance {
 }
 
 #[cfg(test)]
-mod common_tests {
+mod mtn_momo_common_unit_tests {
     mod msisdn {
         // use std::str::FromStr;
-        
+
         use crate::{Country, Msisdn};
         use lazy_static::lazy_static;
         use proptest::prelude::*;
@@ -255,7 +255,7 @@ mod common_tests {
 
     mod payment_status {
         use std::str::FromStr;
-        
+
         use crate::PaymentStatus;
         use proptest::prelude::*;
 

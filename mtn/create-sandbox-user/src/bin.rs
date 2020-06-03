@@ -6,8 +6,6 @@ use serde_json::json;
 use structopt::StructOpt;
 use uuid::Uuid;
 
-mod common;
-
 use common::FALLBACK_CALLBACK_HOST;
 
 #[derive(Debug)]
@@ -31,7 +29,7 @@ struct SandboxApiKey {
     apiKey: String,
 }
 
-fn create_sandbox_credentials(cli_config: &CliConfig) -> Result<SandboxUser> {
+fn create_sandbox_user(cli_config: &CliConfig) -> Result<SandboxUser> {
     let http_client = blocking::Client::builder()
         .http1_title_case_headers()
         .build()?;
@@ -99,9 +97,9 @@ fn create_sandbox_credentials(cli_config: &CliConfig) -> Result<SandboxUser> {
 pub fn main() -> Result<()> {
     let cli_config = CliConfig::from_args();
 
-    let sandbox_credentials = create_sandbox_credentials(&cli_config)?;
+    let sandbox_user = create_sandbox_user(&cli_config)?;
 
-    println!("{:?}", &sandbox_credentials);
+    println!("{:?}", &sandbox_user);
 
     Ok(())
 }
